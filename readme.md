@@ -16,6 +16,11 @@ AWMan2 is bundled with it's own man page, so have a look at
 
 ## Dependencies
 
+### Arch Wiki Doc
+
+A local copy of the arch wiki tends to be pretty useful when you want
+to search through it.
+
 ### Pandoc
 
 As the arch wiki is only available in HTML, but we want man pages,
