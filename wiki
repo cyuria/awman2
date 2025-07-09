@@ -1,0 +1,142 @@
+#!/bin/bash
+set -e
+
+LANG_CODE="$(locale | grep '^LANG' | cut -d= -f2 | cut -d_ -f1)"
+ARCH_WIKI_DIR="${ARCH_WIKI_DIR:-/usr/share/doc/arch-wiki/html}/$LANG_CODE"
+
+SCRIPT_NAME="$0"
+
+# Parse command line arguments
+FIND_PATTERNS=()
+GREP_PATTERNS=()
+PICK_PAGE=
+USAGE=0
+while [[ $# -gt 0 ]]
+do
+    case $1 in
+        -p|--pick)
+            if [[ -n "$PICK_PAGE" ]]
+            then
+                echo "$SCRIPT_NAME: option may only be specified once -- '$1'" >&2
+                USAGE=1
+                break
+            fi
+            if [[ -z "$2" ]]
+            then
+                echo "$SCRIPT_NAME: option requires an argument -- '$1'" >&2
+                USAGE=1
+                break
+            fi
+            PICK_PAGE="$2"
+            if [[ ! "$PICK_PAGE" -ge 0 ]]
+            then
+                echo "$SCRIPT_NAME: expected a positive integer -- '$1'" >&2
+                USAGE=1
+                break
+            fi
+
+            shift
+            shift
+            ;;
+        -g|--grep)
+            if [[ -z "$2" ]]
+            then
+                echo "$SCRIPT_NAME: option requires an argument -- '$1'" >&2
+                USAGE=1
+                break
+            fi
+            GREP_PATTERNS+=("$2")
+            shift
+            shift
+            ;;
+        -*)
+            echo "$SCRIPT_NAME: unknown option -- '$1'" >&2
+            USAGE=1
+            break
+            ;;
+        *)
+            FIND_PATTERNS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Make sure a pattern was specified
+if [[ "${#FIND_PATTERNS[@]}" -eq 0 ]]
+then
+    if [[ "${#GREP_PATTERNS[@]}" -eq 0 ]]
+    then
+        USAGE=1
+        echo "$SCRIPT_NAME: no patterns specified" >&2
+    fi
+fi
+
+if [[ $USAGE -eq 1 ]]
+then
+    echo "usage: $SCRIPT_NAME [-g|--grep regular_expression] filename_glob ... [-p|--pick index]" >&2
+    exit 1
+fi
+
+
+function join {
+    local d=${1-} f=${2-}
+    if shift 2
+    then
+        printf %s "$f" "${@/#/$d}"
+    fi
+}
+
+# Construct a find command
+
+# Do some fancy joining to get a filter for find
+pattern_args=()
+for pattern in "${FIND_PATTERNS[@]}"
+do
+    pattern_args+=("-iname *$pattern*.html")
+done
+read -ra FIND_FILTER <<<"$(join ' -o ' "${pattern_args[@]}")"
+
+# The filter for grep is simpler
+if [[ "${#GREP_PATTERNS[@]}" -eq 0 ]]
+then
+    GREP_FILTER=()
+else
+    # Call grep on each file found to check if it matches the provided patterns
+    GREP_FILTER=(-exec grep -Pl "${GREP_PATTERNS[*]/#/-e }" {} \;)
+fi
+
+# Get a list of matching filenames with find, sorting them for reproducibility
+# Some example of this constructed command are as follows:
+#   find /usr/share/doc/arch-wiki/html/en -type f \(  \) -exec grep -pl -e bash -e fish {}
+#   find /usr/share/doc/arch-wiki/html/en -type f \( -iname *main*.html -o -iname *server*.html \)
+#   find /usr/share/doc/arch-wiki/html/en -type f \( -iname *main*.html -o -iname *server*.html \) -exec grep -pl -e bash -e fish {}
+mapfile -t FILES < <(
+    find "$ARCH_WIKI_DIR" -type f \( "${FIND_FILTER[@]}" \) "${GREP_FILTER[@]}" | sort
+)
+
+# Special error message for the no matched files case
+if [[ "${#FILES[@]}" -eq 0 ]]
+then
+    echo "$SCRIPT_NAME: No Arch Wiki page found for ${FIND_PATTERNS[*]} with contents matching ${GREP_PATTERNS[*]}." >&2
+    exit 1
+fi
+
+# If there is only one file, choose it
+if [[ "${#FILES[@]}" -eq 1 ]]
+then
+    PICK_PAGE=0
+fi
+
+# Checks for unset or out of bounds values of $PICK_PAGE
+if [[ -z "$PICK_PAGE" || -z "${FILES[$PICK_PAGE]}" ]]
+then
+    echo "Choose from the following (with -p/--pick):"
+    for i in "${!FILES[@]}"
+    do
+        relative_path=$(realpath --relative-to="$ARCH_WIKI_DIR" "${FILES[$i]}")
+        printf "\t[%s]\t%s\n" "$i" "${relative_path%.*}"
+    done
+    exit 0
+fi
+
+pandoc "${FILES[$PICK_PAGE]}" -t man -o - | man -l /dev/stdin

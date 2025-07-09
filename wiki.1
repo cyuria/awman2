@@ -1,0 +1,59 @@
+.Dd July 10, 2025
+.Dt WIKI 1
+.Os
+.Sh NAME
+.Nm wiki
+.Nd Search the arch wiki locally using man(1)
+.Sh SYNOPSYS
+.Nm
+.Op Fl g | \-grep Ar regular_expression
+.Op Ar filename_glob
+.Op Fl p | \-pick Ar index
+.Sh DESCRIPTION
+Search a local copy of the arch wiki for pages. Display them using pandoc(1)
+and man(1).
+.Sh ARGUMENTS
+.Bl -tag -width Ds
+.It Fl g, \-grep Ar regular_expression
+Grep through the found pages for the regular expression. Can be passed
+multiple times to match multiple regular expressions. Regular expressions are
+perl compatible.
+.It Fl p, \-pick Ar index
+Show the man page at the given index from the provided search.
+.It Ar filename_glob
+A glob pattern to search for pages. Multiple glob patterns will match
+individually and the results will be merged, thus creating a logical OR.
+.El
+.Sh EXIT STATUS
+.Ex -std
+.Sh ENVIRONMENT
+.Nm
+passes man pages to
+.Xr man 1
+and thus takes the same environment variables as it does.
+.Nm
+also takes the following environment variables:
+.Bl -tag -width MAPATHX
+.It Ev ARCH_WIKI_DIR
+The path to the directory in which the arch wiki is locally stored. Defaults
+to
+.Pa /usr/share/doc/arch-wiki/html
+, as this is the location the `arch-wiki-doc` package installs to on Arch Linux.
+.El
+.Sh EXAMPLES
+View the main page:
+.Pp
+.Dl $ wiki main_page -p 0
+.Pp
+See all pages whose titles contain the word "server":
+.Pp
+.Dl $ wiki server
+.Pp
+Search for any pages containing the regular expression "\ebbash\eb" (searches
+for the word "bash", using "\eb" as a word boundary):
+.Dl $ wiki -g '\ebbash\eb'
+.Sh SEE ALSO
+.Xr apropos 1 ,
+.Xr grep 1 ,
+.Xr man 1 ,
+.Xr pandoc 1
